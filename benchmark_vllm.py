@@ -42,12 +42,14 @@ bench_params = SamplingParams(
     ignore_eos=True,
 )
 
+
 def run_once(params):
     start = time.perf_counter()
     outputs = llm.generate([prompt], params)
     wall_time = time.perf_counter() - start
     result = outputs[0]
     return result, wall_time
+
 
 print("\nWarming up...")
 for i in range(WARMUP_RUNS):
@@ -105,6 +107,7 @@ for i in range(BENCHMARK_RUNS):
         f"TPOT={tpot if tpot is not None else 'N/A'}"
     )
 
+
 def summarize(key, label, scale=1.0):
     values = [r[key] for r in results if r[key] is not None]
     if values:
@@ -114,6 +117,7 @@ def summarize(key, label, scale=1.0):
         )
     else:
         print(f"{label}: unavailable")
+
 
 print("\n========== Summary ==========")
 summarize("ttft", "TTFT (seconds)")

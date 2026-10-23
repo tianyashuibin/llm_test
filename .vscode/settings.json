@@ -1,0 +1,9 @@
+{
+  "python.analysis.extraPaths": [
+    "/Users/minim4/github/vllm"
+  ],
+  "python.defaultInterpreterPath": "/Users/minim4/.envs/pytorch_dev/bin/python",
+  "python.venvPath": "/Users/minim4/.envs",
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "python-envs.defaultPackageManager": "ms-python.python:pip"
+}
