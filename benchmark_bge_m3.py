@@ -2,7 +2,7 @@
 
 import argparse
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 import http.client
 import json
 import math
@@ -11,6 +11,7 @@ from pathlib import Path
 import queue
 import random
 import statistics
+import threading
 import time
 from urllib.parse import urlsplit
 
@@ -73,6 +74,8 @@ def run_load(args, payloads, concurrency):
     headers = {"Content-Type": "application/json"}
     if os.environ.get("VLLM_API_KEY"):
         headers["Authorization"] = "Bearer " + os.environ["VLLM_API_KEY"]
+    progress_lock = threading.Lock()
+    progress = {"completed": 0, "failed": 0, "last_error": None}
 
     def worker():
         connection = None
@@ -101,6 +104,11 @@ def run_load(args, payloads, concurrency):
                         connection.close()
                         connection = None
                 results.append((time.perf_counter() - start, error))
+                with progress_lock:
+                    progress["completed"] += 1
+                    if error is not None:
+                        progress["failed"] += 1
+                        progress["last_error"] = error
         finally:
             if connection is not None:
                 connection.close()
@@ -109,6 +117,18 @@ def run_load(args, payloads, concurrency):
     start = time.perf_counter()
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         futures = [executor.submit(worker) for _ in range(concurrency)]
+        pending = set(futures)
+        while pending:
+            _, pending = wait(pending, timeout=5)
+            if pending:
+                with progress_lock:
+                    snapshot = dict(progress)
+                print(f"  Progress: completed={snapshot['completed']}/{len(payloads)}, "
+                      f"failed={snapshot['failed']}, "
+                      f"remaining={len(payloads) - snapshot['completed']}, "
+                      f"elapsed={time.perf_counter() - start:.1f}s", flush=True)
+                if snapshot["last_error"]:
+                    print(f"  Last error: {snapshot['last_error']}", flush=True)
         results = [item for future in futures for item in future.result()]
     elapsed = time.perf_counter() - start
     latencies = [latency * 1000 for latency, error in results if error is None]
@@ -169,6 +189,8 @@ def main():
             warmup = run_load(args, payloads[:args.warmup], concurrency)
             if warmup["failed"]:
                 raise SystemExit(f"Warmup failed; check endpoint/plugin: {warmup['errors']}")
+            print(f"Warmup complete: {warmup['elapsed_s']:.2f}s", flush=True)
+        print(f"Measuring {args.requests} requests...", flush=True)
         result = run_load(args, payloads[args.warmup:], concurrency)
         summaries.append(result)
         print(f"Success={result['success']}/{result['requests']}, error={result['error_rate']:.2%}, "
