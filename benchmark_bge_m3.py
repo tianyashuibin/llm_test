@@ -15,22 +15,26 @@ import time
 from urllib.parse import urlsplit
 
 
-WORDS = """the a fast small large search model text query document vector sparse
+WORDS = """the a is fast small large search model text query document vector sparse
 dense find explain how why what data cloud server train learn store index
 system book world hello good new old science music travel food city water
 green blue light night day run test build read write useful simple english""".split()
 
 
-def random_text(rng, max_chars):
-    target = rng.randint(min(10, max_chars), max_chars)
+def random_text(rng, min_chars, max_chars):
+    target = rng.randint(min_chars, max_chars)
     words = []
     while True:
         remaining = target - len(" ".join(words)) - bool(words)
-        candidates = [word for word in WORDS if len(word) <= remaining]
+        # Avoid leaving one character, which cannot fit a space plus a word.
+        candidates = [word for word in WORDS
+                      if len(word) <= remaining and remaining - len(word) != 1]
         if not candidates:
             break
         words.append(rng.choice(candidates))
-    return " ".join(words)
+    text = " ".join(words)
+    assert len(text) == target
+    return text
 
 
 def percentile(values, p):
@@ -133,23 +137,29 @@ def main():
     parser.add_argument("--concurrency", type=int, nargs="+", default=[1, 2, 4, 8, 16, 32])
     parser.add_argument("--requests", type=int, default=1000, help="requests per concurrency level")
     parser.add_argument("--warmup", type=int, default=20, help="warmup requests per level")
-    parser.add_argument("--max-chars", type=int, default=50, help="maximum input characters, not tokens")
+    parser.add_argument("--min-chars", type=int, default=400, help="minimum input characters (default: 400)")
+    parser.add_argument("--max-chars", type=int, default=500, help="maximum input characters, not tokens (default: 500)")
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", default="bge_m3_benchmark.json")
     args = parser.parse_args()
-    if (args.requests < 1 or args.warmup < 0 or args.max_chars < 1
+    if (args.requests < 1 or args.warmup < 0 or args.min_chars < 1
+            or args.max_chars < args.min_chars
             or args.timeout <= 0 or any(c < 1 for c in args.concurrency)):
-        parser.error("requests, max-chars, timeout, concurrency must be positive; warmup must be nonnegative")
+        parser.error("require requests/timeout/concurrency > 0, warmup >= 0, and 1 <= min-chars <= max-chars")
     if urlsplit(args.base_url).scheme not in ("http", "https") or not urlsplit(args.base_url).hostname:
         parser.error("base-url must be an HTTP(S) server URL without /v1")
     rng = random.Random(args.seed)
-    texts = [random_text(rng, args.max_chars) for _ in range(args.requests + args.warmup)]
+    texts = [random_text(rng, args.min_chars, args.max_chars) for _ in range(args.requests + args.warmup)]
+    lengths = [len(text) for text in texts[args.warmup:]]
+    input_stats = {"min_chars": min(lengths), "max_chars": max(lengths),
+                   "mean_chars": statistics.mean(lengths)}
     payloads = [json.dumps({"model": args.model, "task": "plugin", "data": {
         "input": text, "return_tokens": False,
     }}).encode() for text in texts]
-    print(f"Input: random English words, 1–{args.max_chars} characters (not tokens); one text/request.")
-    print(f"Samples: {texts[:3]}")
+    print(f"Input: random English words, {args.min_chars}–{args.max_chars} characters (not tokens); one text/request.")
+    print(f"Measured input lengths: min={min(lengths)}, max={max(lengths)}, mean={statistics.mean(lengths):.2f}")
+    print(f"Sample ({len(texts[0])} chars): {texts[0]}")
     print("Closed-loop concurrency; no retries. Latency includes HTTP, JSON parsing and output validation.")
     print("Latency percentiles cover successful requests only; warmup is excluded.")
     summaries = []
@@ -168,7 +178,8 @@ def main():
             print(f"  {name}: {value:.2f}" if value is not None else f"  {name}: N/A")
         for error, count in list(result["errors"].items())[:5]:
             print(f"  Error x{count}: {error}")
-        Path(args.output).write_text(json.dumps({"config": vars(args), "results": summaries}, indent=2) + "\n")
+        Path(args.output).write_text(json.dumps({"config": vars(args), "input_stats": input_stats,
+                                                "results": summaries}, indent=2) + "\n")
     print(f"\nResults saved to {Path(args.output).resolve()}")
 
 
