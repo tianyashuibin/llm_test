@@ -10,7 +10,7 @@ MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 #PROMPT = "Explain how language model inference works."
 MAX_TOKENS = 128
 
-CONCURRENCIES = [1, 2, 4, 8]
+CONCURRENCIES = [1, 2, 4, 8, 16]
 WARMUP_ROUNDS = 2
 BENCHMARK_ROUNDS = 5
 
@@ -28,7 +28,7 @@ token_ids = tokenizer.encode(
 )
 
 PROMPT = tokenizer.decode(
-    token_ids[:256],
+    token_ids[:512],
     skip_special_tokens=True,
 )
 

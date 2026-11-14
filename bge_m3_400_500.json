@@ -1,0 +1,118 @@
+{
+  "config": {
+    "base_url": "http://127.0.0.1:8000",
+    "model": "BAAI/bge-m3",
+    "concurrency": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "requests": 10000,
+    "warmup": 100,
+    "min_chars": 400,
+    "max_chars": 500,
+    "timeout": 30,
+    "seed": 42,
+    "output": "bge_m3_400_500.json"
+  },
+  "input_stats": {
+    "min_chars": 400,
+    "max_chars": 500,
+    "mean_chars": 449.95
+  },
+  "results": [
+    {
+      "concurrency": 1,
+      "requests": 10000,
+      "success": 10000,
+      "failed": 0,
+      "error_rate": 0.0,
+      "elapsed_s": 236.57594890054315,
+      "success_rps": 42.269723724976004,
+      "attempt_rps": 42.269723724976004,
+      "mean_ms": 23.6512349399738,
+      "p50_ms": 23.49910791963339,
+      "p95_ms": 24.616992566734552,
+      "p99_ms": 25.267808828502893,
+      "errors": {}
+    },
+    {
+      "concurrency": 2,
+      "requests": 10000,
+      "success": 10000,
+      "failed": 0,
+      "error_rate": 0.0,
+      "elapsed_s": 198.7842524573207,
+      "success_rps": 50.305795737753506,
+      "attempt_rps": 50.305795737753506,
+      "mean_ms": 39.74769525695592,
+      "p50_ms": 39.62627565488219,
+      "p95_ms": 40.709327068179846,
+      "p99_ms": 41.610347256064415,
+      "errors": {}
+    },
+    {
+      "concurrency": 4,
+      "requests": 10000,
+      "success": 10000,
+      "failed": 0,
+      "error_rate": 0.0,
+      "elapsed_s": 174.57197067234665,
+      "success_rps": 57.282964507337525,
+      "attempt_rps": 57.282964507337525,
+      "mean_ms": 69.81558333514258,
+      "p50_ms": 69.75418562069535,
+      "p95_ms": 72.26625513285398,
+      "p99_ms": 73.62519836984575,
+      "errors": {}
+    },
+    {
+      "concurrency": 8,
+      "requests": 10000,
+      "success": 10000,
+      "failed": 0,
+      "error_rate": 0.0,
+      "elapsed_s": 160.64457556419075,
+      "success_rps": 62.24922294997864,
+      "attempt_rps": 62.24922294997864,
+      "mean_ms": 128.47435405170546,
+      "p50_ms": 128.44892544671893,
+      "p95_ms": 133.19130991585553,
+      "p99_ms": 135.55342629551888,
+      "errors": {}
+    },
+    {
+      "concurrency": 16,
+      "requests": 10000,
+      "success": 10000,
+      "failed": 0,
+      "error_rate": 0.0,
+      "elapsed_s": 156.23019079118967,
+      "success_rps": 64.00811488072466,
+      "attempt_rps": 64.00811488072466,
+      "mean_ms": 249.84281393084675,
+      "p50_ms": 249.89880993962288,
+      "p95_ms": 256.99125551618636,
+      "p99_ms": 259.71267237327993,
+      "errors": {}
+    },
+    {
+      "concurrency": 32,
+      "requests": 10000,
+      "success": 10000,
+      "failed": 0,
+      "error_rate": 0.0,
+      "elapsed_s": 156.26069562043995,
+      "success_rps": 63.9956193737303,
+      "attempt_rps": 63.9956193737303,
+      "mean_ms": 499.3961862764321,
+      "p50_ms": 499.9370235018432,
+      "p95_ms": 507.167140673846,
+      "p99_ms": 510.1250757277012,
+      "errors": {}
+    }
+  ]
+}
