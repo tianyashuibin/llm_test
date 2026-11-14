@@ -1,0 +1,7 @@
+# Runtime logs and process IDs
+*.log
+*.pid
+
+# Python caches
+__pycache__/
+*.py[cod]
