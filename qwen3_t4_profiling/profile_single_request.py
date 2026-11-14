@@ -41,26 +41,30 @@ def main():
         enable_chunked_prefill=False,
     )
     tokenizer = llm.get_tokenizer()
+    marker = "__QWEN_PROFILE_USER_CONTENT_7b49__"
     rendered = tokenizer.apply_chat_template(
-        [{"role": "user", "content": "请解释大语言模型推理中 prefill 和 decode 的区别。"}],
-        tokenize=True,
+        [{"role": "user", "content": marker}],
+        tokenize=False,
         add_generation_prompt=True,
         enable_thinking=False,
     )
-    if len(rendered) > args.input_tokens:
-        raise ValueError("input-tokens is too small for the chat template")
-    # Pad the user turn before rendering, retaining a valid non-thinking
-    # assistant prefix. This is a controlled token workload, not a quality test.
-    prefix = tokenizer.apply_chat_template(
-        [{"role": "user", "content": "请解释大语言模型推理中 prefill 和 decode 的区别。"}],
-        tokenize=True, add_generation_prompt=False, enable_thinking=False,
+    if not isinstance(rendered, str) or rendered.count(marker) != 1:
+        raise ValueError("chat template must render user content exactly once")
+    before, after = rendered.split(marker)
+    prefix = tokenizer.encode(before, add_special_tokens=False)
+    suffix = tokenizer.encode(after, add_special_tokens=False)
+    content = tokenizer.encode(
+        "请解释大语言模型推理中 prefill 和 decode 的区别。",
+        add_special_tokens=False,
     )
-    end_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
-    insert_at = max(i for i, token in enumerate(prefix) if token == end_id)
+    needed = args.input_tokens - len(prefix) - len(content) - len(suffix)
+    if needed < 0:
+        raise ValueError("input-tokens is too small for the chat template and question")
+    # Explicit token segments preserve template delimiters and exact length.
+    # This controlled workload is not a quality evaluation.
     filler = tokenizer.encode(" 推理", add_special_tokens=False)
-    needed = args.input_tokens - len(rendered)
     padding = (filler * ((needed + len(filler) - 1) // len(filler)))[:needed]
-    prompt_ids = rendered[:insert_at] + padding + rendered[insert_at:]
+    prompt_ids = prefix + content + padding + suffix
     assert len(prompt_ids) == args.input_tokens
     params = SamplingParams(temperature=0, max_tokens=args.output_tokens, ignore_eos=True)
     prompt = {"prompt_token_ids": prompt_ids}
