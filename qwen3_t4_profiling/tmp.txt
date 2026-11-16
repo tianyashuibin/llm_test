@@ -1,0 +1,16 @@
+cd /home/mhy/github/llm_test/qwen3_t4_profiling
+
+# FP16
+python profile_single_request.py \
+  --model Qwen/Qwen3-1.7B \
+  --output results/baseline_fp16.json
+
+# W8A16
+python profile_single_request.py \
+  --model Qwen/Qwen3-1.7B-GPTQ-Int8 \
+  --output results/baseline_w8a16.json
+
+# W8A8
+python profile_single_request.py \
+  --model nytopop/Qwen3-1.7B.w8a8 \
+  --output results/baseline_w8a8.json
