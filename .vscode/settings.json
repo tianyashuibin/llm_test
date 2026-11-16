@@ -4,6 +4,6 @@
   ],
   "python.defaultInterpreterPath": "/Users/minim4/.envs/pytorch_dev/bin/python",
   "python.venvPath": "/Users/minim4/.envs",
-  "python-envs.defaultEnvManager": "ms-python.python:system",
-  "python-envs.defaultPackageManager": "ms-python.python:pip"
+  "python-envs.defaultEnvManager": "ms-python.python:conda",
+  "python-envs.defaultPackageManager": "ms-python.python:conda"
 }
