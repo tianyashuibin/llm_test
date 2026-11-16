@@ -33,6 +33,17 @@ bash run.sh stats > results/systems_stats.txt
 
 用 Nsight Systems GUI 打开 `results/single_request.nsys-rep`。采集由 CUDA profiler start/stop 限定，NVTX 的 `measured_single_request` 标识请求；NVTX range 在 capture 启动前开始，不同工具版本可能只显示其部分信息。以捕获区间内 CUDA 时间线为准。
 
+量化版本的采集用 `TAG` 区分产物前缀，不需要改脚本：
+
+```bash
+TAG=w8a16 bash run.sh systems      # -> results/w8a16.nsys-rep, results/systems_w8a16.json
+TAG=w8a8  bash run.sh systems      # -> results/w8a8.nsys-rep,  results/systems_w8a8.json
+bash run.sh quant-systems          # 依次跑上面两个
+bash run.sh quant-stats            # 依次出两份 stats
+```
+
+`TAG` 命中预设（`fp16` / `w8a16` / `w8a8`）时会自动补上对应的 `--model`；命令行显式传 `--model` 可覆盖。默认 `TAG=single_request`，即原来的文件名不变。
+
 建议依次观察：
 
 1. 请求开头的 prefill：处理整段输入，矩阵形状通常比 decode 大。

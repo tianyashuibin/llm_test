@@ -26,11 +26,24 @@ model_for_tag() {
 # other: results/<tag>.nsys-rep, results/systems_<tag>.json, results/kernel_<tag>.ncu-rep.
 tag="${TAG:-single_request}"
 
+# Default NCU targets: the top kernel by cumulative GPU time in each variant's
+# cuda_gpu_kern_sum. Override per tag with KERNEL_REGEX_<TAG>=, or globally
+# with KERNEL_REGEX=.
+default_kernel_regex() {
+  case "$1" in
+    fp16) echo 'gemvx::kernel.*__half' ;;
+    w8a16) echo 'marlin::Marlin<' ;;
+    w8a8) echo 'cutlass::Kernel2<.*OpMultiplyAddSaturate' ;;
+    *) return 1 ;;
+  esac
+}
+
 kernel_regex_for_tag() {
   local var="KERNEL_REGEX_$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
   local regex=""
   if declare -p "$var" >/dev/null 2>&1; then regex="${!var}"; fi
   if [[ -z "$regex" ]]; then regex="${KERNEL_REGEX:-}"; fi
+  if [[ -z "$regex" ]]; then regex="$(default_kernel_regex "$1" 2>/dev/null || true)"; fi
   [[ -n "$regex" ]] || {
     echo "Set $var (or KERNEL_REGEX) from the observed Nsight Systems kernel name" >&2
     return 1
