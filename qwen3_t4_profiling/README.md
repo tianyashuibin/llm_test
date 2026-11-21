@@ -22,7 +22,7 @@ bash run.sh baseline
 
 可用 `PYTHON_BIN=/absolute/venv/bin/python bash run.sh baseline` 指定解释器。其他模式也支持该变量。
 
-`results/baseline.json` 保存 GPU、软件版本、配置、实际 token 数、端到端耗时。单次测量只用于跑通；评价优化收益时需要重复 baseline、记录分布，并保持模型、输入/输出长度及 GPU 状态一致。这里的 tokens/s 包含 prefill，不是纯 decode 速度。
+`results/baseline_<tag>.json`（默认 `results/baseline_single_request.json`）保存 GPU、软件版本、配置、实际 token 数、端到端耗时。单次测量只用于跑通；评价优化收益时需要重复 baseline、记录分布，并保持模型、输入/输出长度及 GPU 状态一致。这里的 tokens/s 包含 prefill，不是纯 decode 速度。
 
 ## 2. Nsight Systems：先看整个请求
 
@@ -77,7 +77,32 @@ KERNEL_REGEX='实际名称正则' LAUNCH_SKIP=10 LAUNCH_COUNT=1 bash run.sh comp
 KERNEL_REGEX='实际名称正则' NCU_SET=full bash run.sh compute
 ```
 
-用 Nsight Compute GUI 打开 `results/kernel.ncu-rep`，观察：
+### 已测出的热点与默认目标
+
+三个版本的 `cuda_gpu_kern_sum` 第一名（以及 W8A16 的第二名）已作为默认正则写进脚本，可直接运行：
+
+```bash
+TAG=fp16  bash run.sh compute    # gemvx::kernel.*__half
+TAG=w8a16 bash run.sh compute    # marlin::Marlin<  +  gemvx::kernel.*__half
+TAG=w8a8  bash run.sh compute    # cutlass::Kernel2<.*OpMultiplyAddSaturate
+```
+
+| 版本 | Kernel | 占比 | 实例 | Avg / Med |
+| --- | --- | --- | --- | --- |
+| FP16 | `gemvx::kernel<...__half...>` | 66.4% | 2636 | 128.8 μs / 68.0 μs |
+| W8A16 | `marlin::Marlin<...>` | 51.6% | 3472 | 54.1 μs / 49.9 μs |
+| W8A16 | `gemvx::kernel<...__half...>` | 21.2% | 32 | 2.410 ms / 2.409 ms |
+| W8A8 | `cutlass::Kernel2<...OpMultiplyAddSaturate...>` | 62.0% | 3472 | 79.8 μs / 73.1 μs |
+
+一个 tag 配多个目标时，NCU 逐个采集，报告写成 `results/kernel_<tag>_<slug>.ncu-rep`（如 `kernel_w8a16_marlin` / `kernel_w8a16_gemvx`）；只有一个目标时保持旧名 `results/kernel_<tag>.ncu-rep`。自定义多目标用换行分隔：
+
+```bash
+KERNEL_REGEX_W8A16=$'marlin::Marlin<\ngemvx::kernel.*__half' bash run.sh compute
+```
+
+W8A16 的第二名值得单独看：它是 32 次、每次约 2.41 ms 的 GEMV，正好一个输出 token 一次，而实例数只有 marlin 的零头却吃掉 21.2% 的时间。这与 `lm_head` 未被量化、回落到 cuBLAS 的行为一致（GPTQ 通常跳过 lm_head），即 decode 每步都要把 151936×2048 的半精度权重过一遍显存。若属实，优化方向不在 kernel 内部，而是让这批输出层权重也走 W8A16，或用 `--num-lookahead-slots`/采样侧手段减少其调用；先靠 NCU 的 launch 形状（M≈1、N≈vocab、K=hidden）确认，再看 DRAM 吞吐是否已接近 T4 的带宽峰值。
+
+用 Nsight Compute GUI 打开 `results/kernel_<tag>.ncu-rep`，观察：
 
 - Speed of Light / Roofline：计算吞吐和内存吞吐，区分计算、带宽或延迟限制。
 - Memory Workload Analysis：DRAM/L2 流量、命中率和访存效率。

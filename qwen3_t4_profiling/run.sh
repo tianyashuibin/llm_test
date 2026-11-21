@@ -26,29 +26,35 @@ model_for_tag() {
 # other: results/<tag>.nsys-rep, results/systems_<tag>.json, results/kernel_<tag>.ncu-rep.
 tag="${TAG:-single_request}"
 
-# Default NCU targets: the top kernel by cumulative GPU time in each variant's
-# cuda_gpu_kern_sum. Override per tag with KERNEL_REGEX_<TAG>=, or globally
-# with KERNEL_REGEX=.
-default_kernel_regex() {
+# Default NCU targets: the top kernels by cumulative GPU time in each variant's
+# cuda_gpu_kern_sum. One regex per line; NCU profiles each separately.
+# Override per tag with KERNEL_REGEX_<TAG>, globally with KERNEL_REGEX; both
+# take a newline-separated list.
+#
+# w8a16 has two: marlin handles the quantized linear layers, while lm_head
+# is left unquantized by GPTQ and runs through cuBLAS gemvx instead. That
+# GEMV is 32 instances of ~2.41 ms (one per decoded token) at 21.2%.
+default_kernel_regexes() {
   case "$1" in
-    fp16) echo 'gemvx::kernel.*__half' ;;
-    w8a16) echo 'marlin::Marlin<' ;;
-    w8a8) echo 'cutlass::Kernel2<.*OpMultiplyAddSaturate' ;;
+    fp16) printf '%s\n' 'gemvx::kernel.*__half' ;;
+    w8a16) printf '%s\n' 'marlin::Marlin<' 'gemvx::kernel.*__half' ;;
+    w8a8) printf '%s\n' 'cutlass::Kernel2<.*OpMultiplyAddSaturate' ;;
     *) return 1 ;;
   esac
 }
 
-kernel_regex_for_tag() {
+# Prints the regex list for a tag, one per line. Exits non-zero if empty.
+kernel_regexes_for_tag() {
   local var="KERNEL_REGEX_$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
-  local regex=""
-  if declare -p "$var" >/dev/null 2>&1; then regex="${!var}"; fi
-  if [[ -z "$regex" ]]; then regex="${KERNEL_REGEX:-}"; fi
-  if [[ -z "$regex" ]]; then regex="$(default_kernel_regex "$1" 2>/dev/null || true)"; fi
-  [[ -n "$regex" ]] || {
+  local list=""
+  if declare -p "$var" >/dev/null 2>&1; then list="${!var}"; fi
+  if [[ -z "$list" ]]; then list="${KERNEL_REGEX:-}"; fi
+  if [[ -z "$list" ]]; then list="$(default_kernel_regexes "$1" 2>/dev/null || true)"; fi
+  [[ -n "$list" ]] || {
     echo "Set $var (or KERNEL_REGEX) from the observed Nsight Systems kernel name" >&2
     return 1
   }
-  printf '%s' "$regex"
+  printf '%s\n' "$list"
 }
 
 do_systems() {  # tag, then extra model arguments
@@ -65,16 +71,33 @@ do_stats() {  # tag
     "results/$1.nsys-rep"
 }
 
+# Turns a kernel regex into a short filesystem-safe label, e.g.
+# 'marlin::Marlin<' -> 'marlin', 'cutlass::Kernel2<...' -> 'cutlass'.
+regex_slug() {
+  printf '%s' "$1" | sed -e 's/::.*//' -e 's/[^A-Za-z0-9_-]/_/g' | cut -c1-32
+}
+
 do_compute() {  # tag, then extra model arguments
   local tag="$1"; shift
-  local regex
-  regex="$(kernel_regex_for_tag "$tag")"
-  ncu --profile-from-start off --target-processes all \
-    --kernel-name-base demangled --kernel-name "regex:${regex}" \
-    --launch-skip "${LAUNCH_SKIP:-0}" --launch-count "${LAUNCH_COUNT:-1}" \
-    --set "${NCU_SET:-basic}" --force-overwrite \
-    --export "results/kernel_${tag}" \
-    "$python_bin" profile_single_request.py --output "results/compute_${tag}.json" "$@"
+  local regexes n=0 regex slug suffix
+  regexes="$(kernel_regexes_for_tag "$tag")" || return 1
+  local total
+  total="$(printf '%s\n' "$regexes" | grep -c . || true)"
+  while IFS= read -r regex; do
+    [[ -n "$regex" ]] || continue
+    n=$((n + 1))
+    # Keep the historical filename when there is a single target; otherwise
+    # suffix each report so targets do not overwrite each other.
+    if (( total == 1 )); then suffix=""; else suffix="_$(regex_slug "$regex")"; fi
+    slug="kernel_${tag}${suffix}"
+    echo "=== ncu: ${tag}${suffix} <- regex:${regex} ==="
+    ncu --profile-from-start off --target-processes all \
+      --kernel-name-base demangled --kernel-name "regex:${regex}" \
+      --launch-skip "${LAUNCH_SKIP:-0}" --launch-count "${LAUNCH_COUNT:-1}" \
+      --set "${NCU_SET:-basic}" --force-overwrite \
+      --export "results/${slug}" \
+      "$python_bin" profile_single_request.py --output "results/compute_${tag}${suffix}.json" "$@"
+  done <<< "$regexes"
 }
 
 # Single-model runs: TAG selects the artifact prefix, and when TAG names a
